@@ -1,6 +1,6 @@
 # Manage Computers
 
-> Note: The use of the scripts requires the PowerShell Module ActiveDirectory.
+> Note: The scripts can be executed directly with PowerShell. Ensure the **ActiveDirectory** module is installed.
 
 + [Add-ADComputersToGroups.ps1](./Add-ADComputersToGroups.ps1)
 
