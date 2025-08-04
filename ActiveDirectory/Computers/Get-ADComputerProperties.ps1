@@ -228,3 +228,4 @@ if ($null -ne $Cmp) {
     $resultMessage | Format-Table -HideTableHeaders -AutoSize | Out-String | Write-Output
 } else {
     Throw "Computer $Computername not found"
+}
