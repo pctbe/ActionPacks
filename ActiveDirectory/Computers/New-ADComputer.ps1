@@ -1,79 +1,48 @@
-﻿#Requires -Version 5.0
-#Requires -Modules ActiveDirectory
-
+#Requires -Version 5.0
 <#
-    .SYNOPSIS
-        Create a Active Directory computer
-    
-    .DESCRIPTION  
-
-    .NOTES
-        This PowerShell script was developed and optimized for ScriptRunner. The use of the scripts requires ScriptRunner. 
-        The customer or user is authorized to copy the script from the repository and use them in ScriptRunner. 
-        The terms of use for ScriptRunner do not apply to this script. In particular, ScriptRunner Software GmbH assumes no liability for the function, 
-        the use and the consequences of the use of this freely available script.
-        PowerShell is a product of Microsoft Corporation. ScriptRunner is a product of ScriptRunner Software GmbH.
-        © ScriptRunner Software GmbH
-
-    .COMPONENT
-        Requires Module ActiveDirectory
-
-    .LINK
-        https://github.com/scriptrunner/ActionPacks/tree/master/ActiveDirectory/Computers 
-
-    .Parameter OUPath
-        [sr-en] Active Directory path
-        [sr-de] Active Directory Pfad
-
-    .Parameter Computername
-        [sr-en] Name of the Active Directory computer
-        [sr-de] Name des Computers
-
-    .Parameter Description
-        [sr-en] Description of the computer
-        [sr-de] Beschreibung des Computers
-
-    .Parameter DisplayName
-        [sr-en] Display name of the computer
-        [sr-de] Anzeigename des Computers
-
-    .Parameter DNSHostName
-        [sr-en] Fully qualified domain name (FQDN) of the computer
-        [sr-de] FQDN des Computers
-
-    .Parameter Homepage
-        [sr-en] URL of the home page of the computer
-        [sr-de] Homepage-URL des Computers
-
-    .Parameter ManagedBy
-        [sr-en] User or group that manages the computer
-        [sr-de] Benutzer oder Gruppe der den Computer verwaltet
-
-    .Parameter OperationSystem
-        [sr-en] Operating system name of the computer
-        [sr-de] Betiebssystem des Computers
-
-    .Parameter Enabled
-        [sr-en] Computer is enabled
-        [sr-de] Computer aktivieren
-    
-    .Parameter DomainAccount
-        [sr-en] Active Directory Credential for remote execution on jumphost without CredSSP
-        [sr-de] Active Directory-Benutzerkonto für die Remote-Ausführung ohne CredSSP        
-
-    .Parameter DomainName
-        [sr-en] Name of Active Directory Domain
-        [sr-de] Name der Active Directory Domäne
-    
-    .Parameter AuthType
-        [sr-en] Specifies the authentication method to use
-        [sr-de] Gibt die zu verwendende Authentifizierungsmethode an
+.NOTES
+    Author: pb
+    Date: 2025-08-01 20:54
+    Version: 0.1
+    Requires: PowerShell 5.0, Module ActiveDirectory
+    Changelog:
+        2025-08-01 - v0.1 - pb - Skript-Ersterstellung
+.SYNOPSIS
+    Creates a new Active Directory computer.
+.DESCRIPTION
+    Creates a computer account with optional properties.
+.PARAMETER OUPath
+    Active Directory path for the new computer.
+.PARAMETER Computername
+    Name of the computer.
+.PARAMETER Description
+    Description for the computer.
+.PARAMETER DisplayName
+    Display name of the computer.
+.PARAMETER DNSHostname
+    Fully qualified domain name of the computer.
+.PARAMETER Enabled
+    Computer is enabled.
+.PARAMETER Homepage
+    Home page URL.
+.PARAMETER OperationSystem
+    Operating system name.
+.PARAMETER ManagedBy
+    User or group that manages the computer.
+.PARAMETER DomainAccount
+    Optional credential for remote execution.
+.PARAMETER DomainName
+    Name of the Active Directory domain.
+.PARAMETER AuthType
+    Authentication method to use.
+.EXAMPLE
+    .\New-ADComputer.ps1 -OUPath "OU=Computers,DC=contoso,DC=com" -Computername "PC1" -Enabled
 #>
 
-param( 
+param(
     [Parameter(Mandatory = $true,ParameterSetName = "Local or Remote DC")]
     [Parameter(Mandatory = $true,ParameterSetName = "Remote Jumphost")]
-    [string]$OUPath,  
+    [string]$OUPath,
     [Parameter(Mandatory = $true,ParameterSetName = "Local or Remote DC")]
     [Parameter(Mandatory = $true,ParameterSetName = "Remote Jumphost")]
     [string]$Computername,
@@ -106,69 +75,35 @@ param(
     [Parameter(ParameterSetName = "Local or Remote DC")]
     [Parameter(ParameterSetName = "Remote Jumphost")]
     [ValidateSet('Basic', 'Negotiate')]
-    [string]$AuthType = "Negotiate" 
+    [string]$AuthType = "Negotiate"
 )
 
-Import-Module ActiveDirectory
-
-try{  
-    [hashtable]$cmdArgs = @{'ErrorAction' = 'Stop'
-                            'AuthType' = $AuthType
-                            }
-    if($null -ne $DomainAccount){
-        $cmdArgs.Add("Credential", $DomainAccount)
+$moduleName = 'ActiveDirectory'
+if (-not (Get-Module -ListAvailable -Name $moduleName)) {
+    try {
+        Install-Module -Name $moduleName -Force -Scope CurrentUser
+    } catch {
+        Write-Error "Module $moduleName could not be installed: $_"
+        exit 1
     }
-    if([System.String]::IsNullOrWhiteSpace($DomainName)){
-        $cmdArgs.Add("Current", 'LocalComputer')
-    }
-    else {
-        $cmdArgs.Add("Identity", $DomainName)
-    }
-    $Domain = Get-ADDomain @cmdArgs
-
-    $cmdArgs = @{'ErrorAction' = 'Stop'
-                'AuthType' = $AuthType
-                'Name' = $Computername
-                'Server' = $Domain.PDCEmulator
-                'Path' = $OUPath
-                'Confirm' = $false
-                'PassThru' = $null
-    }    
-    if($null -ne $DomainAccount){
-        $cmdArgs.Add("Credential", $DomainAccount)
-    } 
-    if($PSBoundParameters.ContainsKey('Description') -eq $true){
-        $cmdArgs.Add("Description", $Description)
-    }
-    if($PSBoundParameters.ContainsKey('Enabled') -eq $true){
-        $cmdArgs.Add("Enabled", $Enabled)
-    }
-    if($PSBoundParameters.ContainsKey('DisplayName') -eq $true){
-        $cmdArgs.Add("DisplayName", $DisplayName)
-    }
-    if($PSBoundParameters.ContainsKey('DNSHostname') -eq $true){
-        $cmdArgs.Add("DNSHostname", $DNSHostname)
-    }
-    if($PSBoundParameters.ContainsKey('Homepage') -eq $true){
-        $cmdArgs.Add("Homepage", $Homepage)
-    }
-    if($PSBoundParameters.ContainsKey('OperationSystem') -eq $true){
-        $cmdArgs.Add("OperationSystem", $OperationSystem)
-    }
-    if($PSBoundParameters.ContainsKey('ManagedBy') -eq $true){
-        $cmdArgs.Add("ManagedBy", $ManagedBy)
-    }
-
-    $cmp = New-ADComputer @cmdArgs
-    if($SRXEnv) {
-        $SRXEnv.ResultMessage = $cmp
-    }
-    else{
-        Write-Output $cmp
-    } 
 }
-catch{
-    throw
-}
-finally{
-}
+Import-Module $moduleName -ErrorAction Stop
+
+$cmdArgs = @{ 'ErrorAction' = 'Stop'; 'AuthType' = $AuthType }
+if ($null -ne $DomainAccount) { $cmdArgs.Add('Credential',$DomainAccount) }
+if ([string]::IsNullOrWhiteSpace($DomainName)) { $cmdArgs.Add('Current','LocalComputer') } else { $cmdArgs.Add('Identity',$DomainName) }
+$Domain = Get-ADDomain @cmdArgs
+
+$cmdArgs = @{ 'ErrorAction' = 'Stop'; 'AuthType' = $AuthType; 'Name' = $Computername; 'Server' = $Domain.PDCEmulator; 'Path' = $OUPath; 'Confirm' = $false; 'PassThru' = $null }
+if ($null -ne $DomainAccount) { $cmdArgs.Add('Credential',$DomainAccount) }
+if ($PSBoundParameters.ContainsKey('Description')) { $cmdArgs.Add('Description',$Description) }
+if ($PSBoundParameters.ContainsKey('Enabled')) { $cmdArgs.Add('Enabled',$Enabled) }
+if ($PSBoundParameters.ContainsKey('DisplayName')) { $cmdArgs.Add('DisplayName',$DisplayName) }
+if ($PSBoundParameters.ContainsKey('DNSHostname')) { $cmdArgs.Add('DNSHostname',$DNSHostname) }
+if ($PSBoundParameters.ContainsKey('Homepage')) { $cmdArgs.Add('Homepage',$Homepage) }
+if ($PSBoundParameters.ContainsKey('OperationSystem')) { $cmdArgs.Add('OperationSystem',$OperationSystem) }
+if ($PSBoundParameters.ContainsKey('ManagedBy')) { $cmdArgs.Add('ManagedBy',$ManagedBy) }
+
+$cmp = New-ADComputer @cmdArgs
+Write-Output $cmp
+

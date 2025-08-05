@@ -1,53 +1,32 @@
-﻿#Requires -Version 5.0
-#Requires -Modules ActiveDirectory
-
+#Requires -Version 5.0
 <#
-    .SYNOPSIS
-         Lists computers where disabled or inactive
-    
-    .DESCRIPTION  
-
-    .NOTES
-        This PowerShell script was developed and optimized for ScriptRunner. The use of the scripts requires ScriptRunner. 
-        The customer or user is authorized to copy the script from the repository and use them in ScriptRunner. 
-        The terms of use for ScriptRunner do not apply to this script. In particular, ScriptRunner Software GmbH assumes no liability for the function, 
-        the use and the consequences of the use of this freely available script.
-        PowerShell is a product of Microsoft Corporation. ScriptRunner is a product of ScriptRunner Software GmbH.
-        © ScriptRunner Software GmbH
-
-    .COMPONENT
-        Requires Module ActiveDirectory
-
-    .LINK
-        https://github.com/scriptrunner/ActionPacks/tree/master/ActiveDirectory/Computers       
-    	
-    .Parameter OUPath
-        Specifies the AD path
-        [sr-de] Active Directory Pfad
-
-    .Parameter DomainAccount
-        Active Directory Credential for remote execution on jumphost without CredSSP
-        [sr-de] Active Directory-Benutzerkonto für die Remote-Ausführung ohne CredSSP        
-
-    .Parameter Disabled
-        Shows the disabled computers
-        [sr-de] Deaktivierte Computer anzeigen
-    
-    .Parameter InActive
-        Shows the inactive computers
-        [sr-de] Inaktive Computer anzeigen
-    
-    .Parameter DomainName
-        Name of Active Directory Domain
-        [sr-de] Name der Active Directory Domäne
-        
-    .Parameter SearchScope
-        Specifies the scope of an Active Directory search
-        [sr-de] Gibt den Suchumfang einer Active Directory-Suche an
-    
-    .Parameter AuthType
-        Specifies the authentication method to use
-        [sr-de] Gibt die zu verwendende Authentifizierungsmethode an
+.NOTES
+    Author: pb
+    Date: 2025-08-01 20:54
+    Version: 0.1
+    Requires: PowerShell 5.0, Module ActiveDirectory
+    Changelog:
+        2025-08-01 - v0.1 - pb - Skript-Ersterstellung
+.SYNOPSIS
+    Lists disabled or inactive computers.
+.DESCRIPTION
+    Retrieves computers that are disabled or inactive within the specified search scope.
+.PARAMETER OUPath
+    Active Directory path to search.
+.PARAMETER Disabled
+    Shows disabled computers.
+.PARAMETER InActive
+    Shows inactive computers.
+.PARAMETER DomainAccount
+    Optional credential for remote execution.
+.PARAMETER DomainName
+    Name of the Active Directory domain.
+.PARAMETER SearchScope
+    Scope of the Active Directory search.
+.PARAMETER AuthType
+    Specifies the authentication method to use.
+.EXAMPLE
+    .\Get-ADComputersWithDefinedStatus.ps1 -OUPath "OU=Computers,DC=contoso,DC=com" -Disabled
 #>
 
 param(
@@ -75,63 +54,37 @@ param(
     [string]$AuthType="Negotiate"
 )
 
-Import-Module ActiveDirectory
+$moduleName = 'ActiveDirectory'
+if (-not (Get-Module -ListAvailable -Name $moduleName)) {
+    try {
+        Install-Module -Name $moduleName -Force -Scope CurrentUser
+    } catch {
+        Write-Error "Module $moduleName could not be installed: $_"
+        exit 1
+    }
+}
+Import-Module $moduleName -ErrorAction Stop
 
-try{
-    $resultMessage = @()
-    [hashtable]$cmdArgs = @{'ErrorAction' = 'Stop'
-                            'AuthType' = $AuthType
-                            }
-    if($null -ne $DomainAccount){
-        $cmdArgs.Add("Credential", $DomainAccount)
-    }
-    if([System.String]::IsNullOrWhiteSpace($DomainName)){
-        $cmdArgs.Add("Current", 'LocalComputer')
-    }
-    else {
-        $cmdArgs.Add("Identity", $DomainName)
-    }
-    $Domain = Get-ADDomain @cmdArgs
+$resultMessage = @()
+$cmdArgs = @{ 'ErrorAction' = 'Stop'; 'AuthType' = $AuthType }
+if ($null -ne $DomainAccount) { $cmdArgs.Add('Credential', $DomainAccount) }
+if ([string]::IsNullOrWhiteSpace($DomainName)) { $cmdArgs.Add('Current','LocalComputer') } else { $cmdArgs.Add('Identity',$DomainName) }
+$Domain = Get-ADDomain @cmdArgs
 
-    $cmdArgs = @{'ErrorAction' = 'Stop'
-                'AuthType' = $AuthType
-                'ComputersOnly' = $null
-                'Server' = $Domain.PDCEmulator
-                'SearchBase' = $OUPath 
-                'SearchScope' = $SearchScope
-                }
-    if($null -ne $DomainAccount){
-        $cmdArgs.Add("Credential", $DomainAccount)
+$cmdArgs = @{ 'ErrorAction' = 'Stop'; 'AuthType' = $AuthType; 'ComputersOnly' = $null; 'Server' = $Domain.PDCEmulator; 'SearchBase' = $OUPath; 'SearchScope' = $SearchScope }
+if ($null -ne $DomainAccount) { $cmdArgs.Add('Credential', $DomainAccount) }
+if ($Disabled) {
+    $computers = Search-ADAccount @cmdArgs -AccountDisabled | Select-Object DistinguishedName,SAMAccountName | Sort-Object SAMAccountName
+    if ($computers) {
+        foreach ($itm in $computers) { $resultMessage += "Disabled: $($itm.DistinguishedName);$($itm.SamAccountName)" }
+        $resultMessage += ''
     }
-    if($Disabled -eq $true){
-        $computers = Search-ADAccount @cmdArgs -AccountDisabled  `
-             | Select-Object DistinguishedName, SAMAccountName | Sort-Object -Property SAMAccountName
-        if($computers){
-            foreach($itm in  $computers){
-                $resultMessage = $resultMessage + ("Disabled: " + $itm.DistinguishedName + ';' +$itm.SamAccountName)
-            }
-            $resultMessage = $resultMessage + ''  
-        }
+}
+if ($InActive) {
+    $computers = Search-ADAccount @cmdArgs -AccountInactive -SearchBase $OUPath -SearchScope $SearchScope | Select-Object DistinguishedName,SAMAccountName | Sort-Object SAMAccountName
+    if ($computers) {
+        foreach ($itm in $computers) { $resultMessage += "Inactive: $($itm.DistinguishedName);$($itm.SamAccountName)" }
     }
-    if($InActive -eq $true){
-        $computers = Search-ADAccount @cmdArgs -AccountInactive `
-            -SearchBase $OUPath -SearchScope $SearchScope | Select-Object DistinguishedName, SAMAccountName | Sort-Object -Property SAMAccountName
-        if($computers){
-            foreach($itm in  $computers){
-            $resultMessage = $resultMessage + ("Inactive: " + $itm.DistinguishedName + ';' +$itm.SamAccountName)            
-            }
-        }
-    } 
-    
-    if($SRXEnv) {
-        $SRXEnv.ResultMessage = $resultMessage 
-    }
-    else{
-        Write-Output $resultMessage 
-    }   
 }
-catch{
-    throw
-}
-finally{
-}
+Write-Output $resultMessage
+
